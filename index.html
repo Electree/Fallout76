@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<meta http-equiv="Content-Language" content="zh-CN" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" />
+		<!--<script src="./node_modules/tesseract.js/dist/tesseract.min.js"></script>-->
+		<script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+		<style type="text/css">
+			html body {
+				background: #fff;
+				height:100%;
+				width:100%;
+				padding:0;
+				margin:0;
+			}
+			#paste {
+				width:100%;
+				border: 2px solid black;
+				min-height:250px;
+			}
+			#paste::before {
+				content:"需要识别的图片放这";
+				display:block;
+			}
+			#paste:focus {
+				content:none;
+			}
+		</style>
+		
+		<title>老师！momoko她不带净化！v0.1</title>
+		
+		
+	</head>
+	<body>
+		<div>step1:截左边的图</div>
+		<div>step2:粘贴在“识别框”</div>
+		<div>step3:截另一边的图</div>
+		<div>step4:粘贴在“识别框”</div>
+		<div>step5:点击“识图”并等待烧烤</div>
+		<div>一选最左上和其他词语重合度最高的</div>
+		<div>如果=0，选和他最不重合的</div>
+		
+		<button onclick="recognizeText()">识图</button>
+		<!--<button onclick="solveText()">进一步处理</button>-->
+		
+		<div id="paste" contenteditable=true></div>
+		<div id="ocrResult" contenteditable=true></div>
+		<div id="dp">
+			<table></table>
+		</div>
+		感谢这么好用的tesseract项目<br />
+		Powered by Electree
+		<!--
+		<script>
+			const { createWorker } = Tesseract;
+			const worker = createWorker({
+				  workerPath: '../node_modules/tesseract.js/dist/worker.min.js',
+				  langPath: '../lang-data',
+				  corePath: '../node_modules/tesseract.js-core/tesseract-core.wasm.js',
+				  logger: m => console.log(m),
+			});
+		</script>
+		-->
+		<script>
+			// 粘贴图片
+			window.addEventListener('load',(e)=>{
+				document.body.onpaste = (e)=>{
+					let items = e.clipboardData.items;
+					for (let i = 0; i < items.length; ++i) {
+						if (items[i].kind == 'file' && items[i].type.indexOf('image/') !== -1) {
+							let blob = items[i].getAsFile();
+							window.URL = window.URL || window.webkitURL;
+							let blobUrl = window.URL.createObjectURL(blob);
+							let img = document.createElement('img');
+							img.src = blobUrl;
+							//let logBox = document.body;
+							//logBox.appendChild(img).display=none;
+						}
+					}
+				};
+			});
+		</script>
+		<script>
+			function recognizeText() {
+				
+				//console.log(fileInput);
+				window.resAll = "";
+				window.picCount=0;
+				
+				(async ()=> {
+					for (let file of document.querySelectorAll("#paste img")) {
+						window.picCount = window.picCount + 1;
+						await Tesseract.recognize(
+							file,
+							"eng",
+							{
+								logger: (m) => {
+									console.log(m);
+									document.getElementById("ocrResult").innerText ="图" + window.picCount + " 烧烤中…" + (Math.round(m.progress*10000))/100 + "%…";
+								},
+							},
+						).then(({ data: { text } }) => {
+							console.log(text);
+							window.resAll+=text;
+						});
+					}
+				})().then(()=>{
+					document.getElementById("ocrResult").innerText =window.resAll;
+				}).then(()=>{
+					window.resAll=window.resAll.replace(/\n|\r/g,"");
+					solveText();
+				});
+				
+			}
+			function solveText(){
+				let temp = window.resAll.match(/[A-Z]{4,7}/gm);
+				window.words = temp;
+				console.log(temp);
+				document.getElementById("ocrResult").innerText = "发现单词：" + temp;
+				let tempObj = {};
+				ini();
+				//tempObj = findWordsWithHighestOverlap(temp)
+				//console.log(tempObj);
+				//document.getElementById("ocrResult").innerText = document.getElementById("ocrResult").innerText + "\n" + JSON.stringify(tempObj);
+			}
+			
+			function findWordsWithHighestOverlap(words) {
+				// 计算每个单词中出现的字母集合
+				let wordLetterSets = words.map(word => new Set(word.toLowerCase()));
+
+				// 初始化结果对象
+				let result = {};
+
+				// 遍历每个单词
+				words.forEach((word, index) => {
+					let maxOverlapCount = 0;
+					let wordsWithMaxOverlap = [];
+
+					// 遍历其他单词
+					words.forEach((otherWord, otherIndex) => {
+						if (index !== otherIndex) {
+							// 计算当前单词与其他单词的字母交集数量
+							let overlapCount = [...wordLetterSets[index]].filter(letter => wordLetterSets[otherIndex].has(letter)).length;
+
+							// 更新最大交集数量和相关单词
+							if (overlapCount > maxOverlapCount) {
+								maxOverlapCount = overlapCount;
+								wordsWithMaxOverlap = [otherWord];
+							} else if (overlapCount === maxOverlapCount) {
+								wordsWithMaxOverlap.push(otherWord);
+							}
+						}
+					});
+
+					// 存储结果
+					result[word] = { maxOverlapCount, wordsWithMaxOverlap };
+				});
+
+				return result;
+			}
+		</script>
+		<script>
+			function sortBySize(obj, sortType) { // 排序的函数
+				let key = "size";
+				// 1.根据数组中的对象的“size”，得到排序后的数组newkey，sortType=true,表示降序return y-x ，其他情况表示升序return x-y ;
+				let newkey = Object.keys(obj).sort((a, b) => {
+					//a,b是键值，无法直接比较大小
+					//根据键值取出可以比较的数值x,y
+					let x = Number(obj[a][key]);
+					let y = Number(obj[b][key]);
+					//升序就升序，降序就降序
+					if (sortType) {
+						return y - x;
+					} else {
+						return x - y;
+					}
+				});
+				//所有给object内部键值排序的尝试都失败了，可能排不了顺序。只能退求保存一个有顺序的键值数组，key为"s"。
+				obj.s = newkey;
+				// 返回排好序的新对象
+				return obj;
+			}
+			 
+			
+			function generateRandomWord(length) {
+				//生成长度小于length的单词
+				//const characters = 'abcdefghijklmnopqrstuvwxyz';
+				const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+				let randomWord = '';
+				for (let i = 0; i < length; i++) {
+					//循环length次
+					//Math.random 生成[0,1)的数字，14位小数
+					//Math.floor 向下取整
+					//Math.floor(Math.random() * characters.length)生成[0,26)的随机整数，实际是[0,25]随机整数，characters[0]取A，characters[0]取Z
+					const randomIndex = Math.floor(Math.random() * characters.length);
+					//randomWord = randomWord + 新随机出的字母
+					randomWord += characters[randomIndex];
+				}
+				return randomWord;
+			}
+
+			// 计算两个单词的重合度
+			function calculateOverlapWithPositions(word1, word2) {
+				//存储重合字母的位置
+				let word1Positions = []; 
+				let word2Positions = []; 
+				
+				let resultObj = {
+					size: 0,
+					intersect: [],
+					//强制转为大写，防止大小写导致的判断错误
+					//ori:word1.toLowerCase(),
+					//tar:word2.toLowerCase(),
+					ori:word1.toUpperCase(),
+					tar:word2.toUpperCase(),
+					pos1: [],
+					pos2: []
+				};
+				//用set去重，得到每个单词包含的字母
+				let set1 = new Set(resultObj.ori);
+				let set2 = new Set(resultObj.tar);
+
+				//得到交集
+				let overlap = new Set([...set1].filter(x => set2.has(x)));
+				
+				//得到重复的、独特的字母数量
+				resultObj.size = (Array.from(overlap).length);
+				
+				//重复的、独特的字母数组
+				resultObj.intersect = Array.from(overlap);
+				
+				//用重复的字母拼成临时字符串
+				let tempStr = resultObj.intersect.join("");
+				
+				//找到两个单词中的重合字母，并记录它们的位置
+				// 根据交集找到word1中相应字母的位置
+				// 比如重复的字母是A、B,tempStr = "AB"
+				// 遍历word1的每个字符（实际上是转化成大写后的，resultObj.ori和word1位数一定一致，所以没改
+				for (let i = 0; i < word1.length; i++) {
+					//如果遇到一位重复,就把字母在tempStr的位置码推入数组，不重复就推空值
+					//比如CADB，pos1=["",0,"",1]
+					if (overlap.has(resultObj.ori[i])) {
+						resultObj.pos1.push(tempStr.indexOf(resultObj.ori[i]));
+					}else{
+						resultObj.pos1.push("");
+					}
+				}
+				// word2同理
+				for (let i = 0; i < word2.length; i++) {
+					if (overlap.has(resultObj.tar[i])) {
+						resultObj.pos2.push(tempStr.indexOf(resultObj.tar[i]));
+					}else{
+						resultObj.pos2.push("");
+					}
+				}
+				
+				//console.log("resultObj",resultObj);
+				return resultObj;
+			}
+			
+			function generateWordsWithOverlap(length, overlapThreshold) {
+				const words = [];
+				let previousWord = generateRandomWord(length); // 生成第一个单词
+
+				// 生成剩余的单词，确保与前一个单词的重合度大于等于 overlapThreshold
+				for (let i = 0; i < 6; i++) {
+					let newWord = '';
+					do {
+						newWord = generateRandomWord(length);
+					} while (calculateOverlapWithPositions(previousWord, newWord).size < overlapThreshold);
+					words.push(newWord);
+					previousWord = newWord;
+				}
+
+				return words;
+			}
+			
+			function findWordsWithHighestOverlap(words) {
+				// 传入单词list
+				// 去重，计算每个单词中出现的字母集合，顺便转为大写
+				let wordLetterSets = words.map(word => new Set(word.toUpperCase()));
+				// 初始化结果对象
+				let result = {};
+
+				// 遍历每个单词，word是遍历到的元素，index是下标
+				words.forEach((word, index) => {
+					let resArr = [];
+					// 遍历每个单词，只要不是本身，就计算交集
+					words.forEach((otherWord, otherIndex) => {
+						if (index !== otherIndex) {
+							// 计算字母交集数量
+							let tempObj = calculateOverlapWithPositions(word,otherWord);
+							//推入数组
+							resArr.push(tempObj);
+						}
+					});
+					//result[word]实际上是某个单词与所有其他单词的交集情况，计算出一个顺序数组从交集多到少
+					result[word] = sortBySize(resArr,true);
+					
+					//遍历result，实际上遍历所有单词与其他单词的交集情况，因为含有顺序码数组，所以可以知道每个单词与其他单词交集的最大值，所以可以给出单词键值排序。
+					//这个单词键值排序是个二维数组，第一维是单词本身，可以用作键值，第二维是它和其他单词字母的最大交集数。
+					let oriArr=[];
+					for (item of Object.keys(result)){
+						if(item !=="s"){
+							oriArr.push([item,result[item][(result[item].s[0])].size]);
+						}
+					}
+					result.s = oriArr.sort((a,b)=>{
+						return b[1]-a[1];
+					});
+					
+				});
+				//console.log("result",result);
+				return result;
+			}
+			
+			// 生成具有一定重合度的7个单词
+			//window.words = generateWordsWithOverlap(6, 2);//生成数组
+			//console.log("生成：",window.words);//展示数组
+			
+			//参数应该从全局拿，尤其是警惕手动修改单词的情况
+			
+			
+			//处理生成的obj，内层和外层的s序列转化成从大到小的数组。
+			//{}
+			//
+			//
+			//
+			//
+			function solveArr(obj){
+				let tArr = [];
+				let fatherS = obj["s"];
+				//console.log(fatherS);
+				let fatherI = 0;
+				for(let i = 0;i < fatherS.length;i++){
+					let tag = fatherS[i][0];
+					let tarr = [];
+					let sonS = obj[tag]["s"];
+					console.log(sonS);
+					//console.log(tag);
+					for (let j = 0;j < sonS.length;j++){
+						tarr.push(obj[tag][sonS[j]]);
+					}
+					tArr.push(tarr);
+				}
+				return tArr;
+			}
+			
+			function tableInit(){
+				window.table = document.createElement('table');
+				
+				window.table.header = document.createElement('th');
+				window.table.appendChild(window.table.header);
+				
+				let td = document.createElement('td');
+				td.textContent = "words:";
+				window.table.header.appendChild(td);
+				
+				window.words.forEach((i,j,k)=>{
+					//console.log(i,j,k);
+					let tr = document.createElement('tr');
+					let td0 = document.createElement('td');
+					let subEle = window.tabArr[j];
+					//console.log("subEle",subEle);
+					td0.textContent = subEle[0].ori;
+					tr.appendChild(td0);
+					
+					subEle.forEach((i0,j0,k0)=>{
+						console.log("i0,j0,k0",i0,j0,k0);
+						let w = document.createElement('td');
+						//w.textContent = "("+i0.intersect.toString().length+")";
+						w.textContent =w.textContent +"["+i0.intersect.toString()+"]:\n";
+						i0.pos2.forEach((iw,jw,kw)=>{
+							let p = document.createElement('span');
+							//console.log("iw,jw,kw",iw,jw,kw);
+							//console.log(iw);
+							if (iw!==""){
+								p.style.fontWeight = "bold";
+								p.style.color = "green";
+							}
+							p.textContent = i0.tar[jw];
+							
+							w.appendChild(p);
+							tr.appendChild(w);
+						});
+						
+						
+						
+						window.table.appendChild(tr);
+					});
+				});
+				document.getElementById("dp").replaceChild(window.table,document.querySelector("table"));
+				//document.body.appendChild(window.table);
+			}
+			
+			function genTable(arr){
+				window.table = document.createElement('table');
+				
+				
+				
+				window.table.headerRow = document.createElement('tr');
+				window.table.header = document.createElement('th');
+				//window.table.header.content = "words:" + window.words;
+				
+				
+				
+				document.body.appendChild(table);
+			}
+			
+			
+			function generateTable(obj) {
+				let sortedWords = obj;
+				const table = document.createElement('table');
+
+				// 创建表头
+				let headerRow = document.createElement('tr');
+				let headerCell = document.createElement('th');
+				headerCell.textContent = 'Words' + JSON.stringify(words);
+				headerCell.style.outline = "0.2px solid black";
+				table.appendChild(headerCell);
+				
+				//table.appendChild(headerRow);
+				
+				for(item of Object.keys(sortedWords)){
+					if(item!=="s"){
+						let row = document.createElement('tr');
+						let cell = document.createElement('td');
+						cell.textContent = sortedWords[item];
+						//console.log(sortedWords[item]);
+						sortedWords[item].s.forEach(
+							(i,j,k)=>{
+								//console.log(i,j,k);
+								//console.log(sortedWords[item][i]);
+							}
+						);
+						//console.log(sortedWords[item]);
+						cell.style.outline = "0.2px solid black";
+						
+					}
+					
+				}
+
+				return table;
+			}
+			
+			function ini(){
+				let tempArr = findWordsWithHighestOverlap(window.words);
+				//console.log("tempArr",tempArr);
+				window.tabArr = solveArr(tempArr);
+				//console.log("排序后的数组",window.tabArr);
+				tableInit();
+			}
+			
+		</script>
+	</body>
+</html>
